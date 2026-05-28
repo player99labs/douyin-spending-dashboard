@@ -1,0 +1,1318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>抖音消费看板</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(135deg, #fef3f8 0%, #fce8f3 50%, #f3e8ff 100%);
+    min-height: 100vh;
+    color: #1f2937;
+    padding: 24px;
+  }
+  .container { max-width: 1400px; margin: 0 auto; }
+  h1 {
+    font-size: 28px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #ec4899, #a855f7);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 4px;
+  }
+  .subtitle { color: #6b7280; font-size: 14px; margin-bottom: 24px; }
+
+  /* Drop zone */
+  .dropzone {
+    border: 2px dashed #ec4899;
+    border-radius: 16px;
+    padding: 40px 24px;
+    text-align: center;
+    background: rgba(255,255,255,0.7);
+    backdrop-filter: blur(10px);
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 24px;
+  }
+  .dropzone:hover, .dropzone.drag-over {
+    background: rgba(252, 232, 243, 0.9);
+    border-color: #a855f7;
+    transform: scale(1.01);
+  }
+  .dropzone-icon { font-size: 48px; margin-bottom: 12px; }
+  .dropzone-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; color: #1f2937; }
+  .dropzone-hint { color: #6b7280; font-size: 13px; }
+  .dropzone.compact { padding: 16px 24px; }
+  .dropzone.compact .dropzone-icon { font-size: 24px; margin-bottom: 0; margin-right: 12px; display: inline-block; vertical-align: middle; }
+  .dropzone.compact .dropzone-title { display: inline-block; vertical-align: middle; font-size: 14px; margin-bottom: 0; }
+  .dropzone.compact .dropzone-hint { display: inline-block; vertical-align: middle; margin-left: 12px; }
+  #fileInput { display: none; }
+
+  /* Layout */
+  .hidden { display: none !important; }
+  .card {
+    background: rgba(255,255,255,0.85);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 4px 16px rgba(236, 72, 153, 0.08);
+    border: 1px solid rgba(255,255,255,0.5);
+  }
+  .grid { display: grid; gap: 16px; }
+  .grid-summary { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 16px; }
+  .grid-2 { grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); margin-bottom: 16px; }
+  .grid-1 { grid-template-columns: 1fr; margin-bottom: 16px; }
+
+  .stat-label { font-size: 12px; color: #6b7280; margin-bottom: 6px; font-weight: 500; }
+  .stat-value { font-size: 24px; font-weight: 700; color: #1f2937; }
+  .stat-value.pink { color: #ec4899; }
+  .stat-value.purple { color: #a855f7; }
+  .stat-value.green { color: #10b981; }
+  .stat-value.amber { color: #f59e0b; }
+  .stat-sub { font-size: 11px; color: #9ca3af; margin-top: 4px; }
+
+  .card-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1f2937;
+    margin-bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .card-title small { font-weight: 400; color: #9ca3af; font-size: 12px; }
+
+  /* Filters */
+  .filters {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .filter-group { display: flex; flex-direction: column; gap: 4px; }
+  .filter-group label { font-size: 11px; color: #6b7280; font-weight: 500; }
+  select, input[type=text], input[type=date] {
+    padding: 8px 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: white;
+    font-size: 13px;
+    font-family: inherit;
+    min-width: 140px;
+  }
+  select:focus, input:focus { outline: 2px solid #ec4899; outline-offset: 1px; border-color: transparent; }
+  button {
+    padding: 8px 14px;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+  .btn-primary { background: linear-gradient(135deg, #ec4899, #a855f7); color: white; }
+  .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+  .btn-secondary { background: #f3f4f6; color: #4b5563; }
+  .btn-secondary:hover { background: #e5e7eb; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #f3f4f6; }
+  th { background: #fafafa; font-weight: 600; color: #374151; font-size: 12px; cursor: pointer; user-select: none; position: sticky; top: 0; }
+  th:hover { background: #f3f4f6; }
+  th.sort-asc::after { content: " ▲"; color: #ec4899; }
+  th.sort-desc::after { content: " ▼"; color: #ec4899; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  th.num { text-align: right; }
+  tr:hover td { background: #fdf4ff; }
+  .table-wrap { max-height: 500px; overflow-y: auto; border-radius: 12px; }
+  .nickname-input {
+    width: 100%;
+    padding: 4px 8px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+    background: transparent;
+    transition: all 0.15s;
+  }
+  .nickname-input:hover { background: #fff; border-color: #e5e7eb; }
+  .nickname-input:focus { outline: none; background: #fff; border-color: #ec4899; }
+  .has-nickname { color: #ec4899; font-weight: 500; }
+
+  /* Chart containers */
+  .chart-container {
+    position: relative;
+    height: 320px;
+  }
+  .chart-container.tall { height: 400px; }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .tab {
+    padding: 10px 16px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    color: #6b7280;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+  }
+  .tab:hover { color: #ec4899; }
+  .tab.active { color: #ec4899; border-bottom-color: #ec4899; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #9ca3af;
+  }
+  .empty-state-icon { font-size: 64px; margin-bottom: 16px; }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    body { padding: 12px; }
+    .grid-2 { grid-template-columns: 1fr; }
+    h1 { font-size: 22px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>抖音消费看板</h1>
+  <p class="subtitle">分析你的直播打赏消费 · 数据完全在本地浏览器处理，不上传任何地方</p>
+
+  <!-- Drop zone -->
+  <div id="dropzone" class="dropzone">
+    <div class="dropzone-icon">📊</div>
+    <div class="dropzone-title">拖入抖音钻石明细 CSV 文件</div>
+    <div class="dropzone-hint">或 <span style="color:#ec4899;font-weight:600;">点击选择文件</span> · 支持 .csv 格式</div>
+    <input type="file" id="fileInput" accept=".csv,.txt">
+  </div>
+
+  <!-- Main content -->
+  <div id="main" class="hidden">
+
+    <!-- Summary cards -->
+    <div id="summaryGrid" class="grid grid-summary"></div>
+
+    <!-- Filters -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">
+        <span>筛选条件</span>
+        <button id="resetFilters" class="btn-secondary">重置筛选</button>
+      </div>
+      <div class="filters">
+        <div class="filter-group">
+          <label>起始月份</label>
+          <select id="startMonth"></select>
+        </div>
+        <div class="filter-group">
+          <label>结束月份</label>
+          <select id="endMonth"></select>
+        </div>
+        <div class="filter-group">
+          <label>主播</label>
+          <select id="streamerFilter">
+            <option value="">全部主播</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>排名展示数量</label>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <select id="topN">
+              <option value="5">前 5 名</option>
+              <option value="10" selected>前 10 名</option>
+              <option value="20">前 20 名</option>
+              <option value="999">全部</option>
+              <option value="custom">自定义…</option>
+            </select>
+            <input type="number" id="topNCustom" min="1" max="9999" value="15"
+                   placeholder="N" style="display:none;width:80px;min-width:0;">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <div class="tab active" data-tab="overview">总览</div>
+      <div class="tab" data-tab="monthly">月度分析</div>
+      <div class="tab" data-tab="streamers">主播明细</div>
+      <div class="tab" data-tab="gifts">礼物分布</div>
+      <div class="tab" data-tab="nicknames">主播昵称</div>
+      <div class="tab" data-tab="transactions">交易记录</div>
+    </div>
+
+    <!-- Overview tab -->
+    <div id="tab-overview" class="tab-content active">
+      <div class="grid grid-2">
+        <div class="card">
+          <div class="card-title">月度消费趋势 <small>RMB ¥</small></div>
+          <div class="chart-container"><canvas id="chartMonthly"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">主播消费排行 <small>按总消费金额 ¥</small></div>
+          <div class="chart-container"><canvas id="chartTopStreamers"></canvas></div>
+        </div>
+      </div>
+      <div class="grid grid-1">
+        <div class="card">
+          <div class="card-title">月度消费按主播分布（堆叠） <small>前 N 名主播</small></div>
+          <div class="chart-container tall"><canvas id="chartStacked"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Monthly tab -->
+    <div id="tab-monthly" class="tab-content">
+      <div class="grid grid-1">
+        <div class="card">
+          <div class="card-title">月度消费金额（含累计）</div>
+          <div class="chart-container tall"><canvas id="chartMonthlyDetail"></canvas></div>
+        </div>
+      </div>
+      <div class="grid grid-1">
+        <div class="card">
+          <div class="card-title">
+            <span>单月主播消费分布</span>
+            <span style="display:flex;gap:8px;align-items:center;">
+              <label style="font-size:12px;color:#6b7280;">选择月份：</label>
+              <select id="pieMonth" style="min-width:140px;"></select>
+            </span>
+          </div>
+          <div class="chart-container tall"><canvas id="chartMonthPie"></canvas></div>
+        </div>
+      </div>
+      <div class="grid grid-1">
+        <div class="card">
+          <div class="card-title">月度数据表</div>
+          <div class="table-wrap">
+            <table id="monthlyTable">
+              <thead><tr>
+                <th>月份</th>
+                <th class="num">消费 (¥)</th>
+                <th class="num">充值 (¥)</th>
+                <th class="num">交易笔数</th>
+                <th class="num">涉及主播数</th>
+                <th class="num">最高单笔 (¥)</th>
+                <th>主要打赏对象</th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Streamers tab -->
+    <div id="tab-streamers" class="tab-content">
+      <div class="card">
+        <div class="card-title">主播消费明细 <small>点击列名排序</small></div>
+        <div class="table-wrap">
+          <table id="streamerTable">
+            <thead><tr>
+              <th data-sort="name">主播</th>
+              <th data-sort="memberCount" class="num">账号数</th>
+              <th data-sort="id">成员账号</th>
+              <th data-sort="total" class="num sort-desc">总消费 (¥)</th>
+              <th data-sort="count" class="num">笔数</th>
+              <th data-sort="avg" class="num">平均 (¥)</th>
+              <th data-sort="max" class="num">最高 (¥)</th>
+              <th data-sort="months" class="num">活跃月数</th>
+              <th data-sort="first">首次</th>
+              <th data-sort="last">最近</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gifts tab -->
+    <div id="tab-gifts" class="tab-content">
+      <div class="grid grid-2">
+        <div class="card">
+          <div class="card-title">礼物消费金额排行 <small>按 ¥ 排序</small></div>
+          <div class="chart-container tall"><canvas id="chartGiftsValue"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">礼物次数排行 <small>按次数排序</small></div>
+          <div class="chart-container tall"><canvas id="chartGiftsCount"></canvas></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">礼物明细表</div>
+        <div class="table-wrap">
+          <table id="giftsTable">
+            <thead><tr>
+              <th>礼物</th>
+              <th class="num">总消费 (¥)</th>
+              <th class="num">次数</th>
+              <th class="num">单次 (¥)</th>
+              <th class="num">占比</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Nicknames tab -->
+    <div id="tab-nicknames" class="tab-content">
+      <div class="card">
+        <div class="card-title">
+          <span>主播昵称管理 & 多账号合并</span>
+          <small>昵称保存在本地浏览器，刷新不会丢失</small>
+        </div>
+        <div style="background:#fef3f8;border-left:3px solid #ec4899;padding:10px 14px;border-radius:6px;margin-bottom:14px;font-size:13px;color:#831843;">
+          <b>💡 多账号合并提示：</b>如果同一个主播有多个号，<b>在它们的昵称框里填入相同的名字</b>（例如都填"小王"），它们就会被自动合并成一个主播，所有图表、排行、筛选都按合并后的数据展示。粉色高亮的行就是已经合并的账号组。
+        </div>
+        <div style="background:#f0f9ff;border-left:3px solid #0ea5e9;padding:10px 14px;border-radius:6px;margin-bottom:14px;font-size:13px;color:#0c4a6e;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+            <div>
+              <b>💾 备份昵称：</b>昵称保存在浏览器本地，如果换浏览器/换电脑/移动 HTML 文件会丢失。建议导出备份，下次需要时一键导入。
+              <div style="margin-top:4px;color:#075985;"><span id="nickStatus">当前已保存 0 个昵称</span></div>
+            </div>
+            <div style="display:flex;gap:8px;flex-shrink:0;">
+              <button id="exportNicks" class="btn-primary">⬇️ 导出昵称</button>
+              <button id="importNicksBtn" class="btn-secondary">⬆️ 导入昵称</button>
+              <input type="file" id="importNicksFile" accept=".json" style="display:none;">
+            </div>
+          </div>
+        </div>
+        <div class="table-wrap" style="max-height:600px;">
+          <table id="nicknamesTable">
+            <thead><tr>
+              <th>主播 ID</th>
+              <th>昵称（点击编辑，输入相同昵称合并）</th>
+              <th class="num">本账号消费 (¥)</th>
+              <th class="num">本账号笔数</th>
+              <th class="num">合并组总计 (¥)</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Transactions tab -->
+    <div id="tab-transactions" class="tab-content">
+      <div class="card">
+        <div class="card-title">
+          <span>交易明细</span>
+          <small>受当前筛选条件影响</small>
+        </div>
+        <div style="margin-bottom:12px;">
+          <input type="text" id="txSearch" placeholder="搜索礼物名、主播..." style="width:300px;">
+          <select id="txType" style="margin-left:8px;">
+            <option value="all">全部类型</option>
+            <option value="出账">仅消费</option>
+            <option value="入账">仅充值</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table id="txTable">
+            <thead><tr>
+              <th>时间</th>
+              <th>类型</th>
+              <th>礼物 / 项目</th>
+              <th>主播账号</th>
+              <th>主播昵称</th>
+              <th class="num">¥</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+          <p id="txMore" style="text-align:center;padding:12px;color:#9ca3af;font-size:12px;"></p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Empty state -->
+  <div id="emptyState" class="empty-state">
+    <div class="empty-state-icon">💎</div>
+    <p>请上传抖音钻石明细 CSV 文件以查看消费看板</p>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ============ Watermark (self-healing footer) ============
+(function(){
+  // Text is char-code-encoded so source-text search won't find it
+  var _s = String.fromCharCode(109,97,100,101,32,98,121,32,64,112,108,97,121,101,114,57,57,108,97,98,115);
+  var _k = String.fromCharCode(95,119,109,95,49,57,55,97); // element id
+  function _ensure(){
+    if (!document.body) return;
+    var el = document.getElementById(_k);
+    if (!el) {
+      el = document.createElement('div');
+      el.id = _k;
+      el.textContent = _s;
+      el.style.cssText = 'text-align:center;padding:24px 12px;margin-top:32px;color:#9ca3af;font-size:13px;font-style:italic;letter-spacing:0.5px;border-top:1px solid rgba(236,72,153,0.15);user-select:none;';
+      document.body.appendChild(el);
+    } else if (el.textContent !== _s) {
+      el.textContent = _s;
+    } else if (el !== document.body.lastElementChild) {
+      // If something was appended after, move credit back to bottom
+      document.body.appendChild(el);
+    }
+  }
+  function _start(){
+    _ensure();
+    try {
+      var obs = new MutationObserver(function(){ _ensure(); });
+      obs.observe(document.body, { childList: true });
+    } catch(e) {}
+    // Backup periodic re-check (in case observer is disconnected by hostile code)
+    setInterval(_ensure, 3000);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _start);
+  } else {
+    _start();
+  }
+})();
+
+// ============ Constants ============
+const RATE = 10; // 10 diamonds = ¥1
+const PALETTE = ['#ec4899','#a855f7','#3b82f6','#10b981','#f59e0b','#ef4444','#06b6d4','#8b5cf6','#f97316','#84cc16','#14b8a6','#f43f5e','#6366f1','#eab308','#22c55e','#0ea5e9','#d946ef','#ea580c','#65a30d','#0d9488'];
+
+// ============ State ============
+const state = {
+  raw: [],        // all parsed rows
+  filtered: [],   // after filter
+  streamerStats: {}, // streamer -> stats (on raw, for nickname tab)
+  nicknames: {},  // streamer id -> nickname
+  filters: { startMonth: '', endMonth: '', streamer: '', topN: 10 },
+  charts: {},
+  sort: { col: 'total', dir: 'desc' },
+  txSort: 'desc',
+};
+
+// Load nicknames from localStorage
+try {
+  const stored = localStorage.getItem('douyin_nicknames');
+  if (stored) state.nicknames = JSON.parse(stored);
+} catch (e) {}
+
+function saveNicknames() {
+  try { localStorage.setItem('douyin_nicknames', JSON.stringify(state.nicknames)); } catch (e) {}
+}
+
+function nickOf(id) {
+  return state.nicknames[id] || id;
+}
+
+// Build streamer dropdown options grouped by nickname (multiple raw IDs may share one group)
+function populateStreamerFilter() {
+  const streamerSel = document.getElementById('streamerFilter');
+  const cur = state.filters.streamer;
+  streamerSel.innerHTML = '<option value="">全部主播</option>';
+  // Aggregate by group key
+  const groups = {};
+  for (const [id, s] of Object.entries(state.streamerStats)) {
+    const gk = nickOf(id);
+    if (!groups[gk]) groups[gk] = { total: 0, count: 0, members: 0 };
+    groups[gk].total += s.total;
+    groups[gk].count += s.count;
+    groups[gk].members += 1;
+  }
+  const sortedGroups = Object.entries(groups).sort((a,b) => b[1].total - a[1].total);
+  for (const [gk, g] of sortedGroups) {
+    const memberSuffix = g.members > 1 ? ` · ${g.members} 个账号` : '';
+    const sel = gk === cur ? 'selected' : '';
+    streamerSel.insertAdjacentHTML('beforeend',
+      `<option value="${gk}" ${sel}>${gk} (¥${g.total.toFixed(0)})${memberSuffix}</option>`);
+  }
+  // If the previously selected group no longer exists, clear it
+  if (cur && !groups[cur]) {
+    state.filters.streamer = '';
+    streamerSel.value = '';
+  }
+}
+
+// ============ Helpers ============
+const fmtRMB = (v) => '¥' + (v || 0).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+const fmtNum = (v) => (v || 0).toLocaleString('zh-CN');
+const toRMB = (diamonds) => diamonds / RATE;
+const monthOf = (dateStr) => dateStr ? dateStr.substring(0, 7) : ''; // YYYY-MM
+
+// ============ File loading ============
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+
+dropzone.addEventListener('click', () => fileInput.click());
+['dragenter','dragover'].forEach(e => dropzone.addEventListener(e, (ev) => {
+  ev.preventDefault(); ev.stopPropagation();
+  dropzone.classList.add('drag-over');
+}));
+['dragleave','drop'].forEach(e => dropzone.addEventListener(e, (ev) => {
+  ev.preventDefault(); ev.stopPropagation();
+  dropzone.classList.remove('drag-over');
+}));
+dropzone.addEventListener('drop', (ev) => {
+  const file = ev.dataTransfer.files[0];
+  if (file) loadFile(file);
+});
+fileInput.addEventListener('change', (ev) => {
+  const file = ev.target.files[0];
+  if (file) loadFile(file);
+});
+
+function loadFile(file) {
+  Papa.parse(file, {
+    header: true,
+    skipEmptyLines: true,
+    encoding: 'UTF-8',
+    transformHeader: h => h.replace(/^﻿/, '').trim(),
+    complete: (results) => {
+      processData(results.data);
+    },
+    error: (err) => {
+      alert('文件解析失败：' + err.message);
+    }
+  });
+}
+
+// ============ Data processing ============
+function processData(rows) {
+  // Normalize fields
+  state.raw = rows.map(r => {
+    const amount = parseInt(r['虚拟币个数']) || 0;
+    return {
+      account: r['抖音号'],
+      type: r['出入账'],       // '入账' or '出账'
+      diamonds: amount,
+      rmb: amount / RATE,
+      gift: r['订单名称'] || '',
+      streamer: (r['对方抖音号'] || '').trim() || '-',
+      time: r['创建时间'] || '',
+      month: monthOf(r['创建时间']),
+    };
+  }).filter(r => r.month); // drop bad rows
+
+  // Sort by time
+  state.raw.sort((a,b) => a.time.localeCompare(b.time));
+
+  // Compute streamer stats on ALL spending (independent of filters; used for nicknames tab)
+  state.streamerStats = {};
+  for (const r of state.raw) {
+    if (r.type !== '出账' || r.streamer === '-') continue;
+    if (!state.streamerStats[r.streamer]) {
+      state.streamerStats[r.streamer] = { total: 0, count: 0 };
+    }
+    state.streamerStats[r.streamer].total += r.rmb;
+    state.streamerStats[r.streamer].count += 1;
+  }
+
+  // Initialize filters
+  const months = [...new Set(state.raw.map(r => r.month))].sort();
+  const startSel = document.getElementById('startMonth');
+  const endSel = document.getElementById('endMonth');
+  startSel.innerHTML = '';
+  endSel.innerHTML = '';
+  for (const m of months) {
+    startSel.insertAdjacentHTML('beforeend', `<option value="${m}">${m}</option>`);
+    endSel.insertAdjacentHTML('beforeend', `<option value="${m}">${m}</option>`);
+  }
+  state.filters.startMonth = months[0];
+  state.filters.endMonth = months[months.length - 1];
+  startSel.value = state.filters.startMonth;
+  endSel.value = state.filters.endMonth;
+
+  // Streamer filter dropdown — populated as groups
+  populateStreamerFilter();
+
+  // Reveal UI
+  document.getElementById('emptyState').classList.add('hidden');
+  document.getElementById('main').classList.remove('hidden');
+  dropzone.classList.add('compact');
+  dropzone.querySelector('.dropzone-title').textContent = `已加载 ${state.raw.length.toLocaleString()} 条记录`;
+  dropzone.querySelector('.dropzone-hint').textContent = '点击或拖入新文件以替换数据';
+
+  applyFilters();
+}
+
+function applyFilters() {
+  const { startMonth, endMonth, streamer } = state.filters;
+  state.filtered = state.raw.filter(r => {
+    if (r.month < startMonth || r.month > endMonth) return false;
+    // streamer filter compares the group key (nickname) — merges multi-account streamers
+    if (streamer && nickOf(r.streamer) !== streamer) return false;
+    return true;
+  });
+  render();
+}
+
+// ============ Aggregation ============
+function aggregate(rows) {
+  const spend = rows.filter(r => r.type === '出账');
+  const recharge = rows.filter(r => r.type === '入账');
+
+  // Summary
+  const totalSpend = spend.reduce((s, r) => s + r.rmb, 0);
+  const totalRecharge = recharge.reduce((s, r) => s + r.rmb, 0);
+  const streamerSet = new Set(spend.filter(r => r.streamer !== '-').map(r => nickOf(r.streamer)));
+  const months = [...new Set(spend.map(r => r.month))].sort();
+  const avgMonthly = months.length ? totalSpend / months.length : 0;
+  const maxTx = spend.reduce((m, r) => Math.max(m, r.rmb), 0);
+
+  // By month — use group key (nickname or raw id) as streamer identifier
+  const byMonth = {};
+  for (const r of spend) {
+    const gk = nickOf(r.streamer);
+    if (!byMonth[r.month]) byMonth[r.month] = { spend: 0, count: 0, streamers: new Set(), max: 0, byStreamer: {} };
+    byMonth[r.month].spend += r.rmb;
+    byMonth[r.month].count += 1;
+    byMonth[r.month].streamers.add(gk);
+    byMonth[r.month].max = Math.max(byMonth[r.month].max, r.rmb);
+    byMonth[r.month].byStreamer[gk] = (byMonth[r.month].byStreamer[gk] || 0) + r.rmb;
+  }
+  for (const r of recharge) {
+    if (!byMonth[r.month]) byMonth[r.month] = { spend: 0, count: 0, streamers: new Set(), max: 0, byStreamer: {}, recharge: 0 };
+    byMonth[r.month].recharge = (byMonth[r.month].recharge || 0) + r.rmb;
+  }
+
+  // By streamer — grouped by nickname (multiple account IDs may share one group)
+  const byStreamer = {};
+  for (const r of spend) {
+    if (r.streamer === '-') continue;
+    const gk = nickOf(r.streamer);
+    if (!byStreamer[gk]) byStreamer[gk] = {
+      id: gk, total: 0, count: 0, max: 0, months: new Set(), times: [], byMonth: {}, members: new Set()
+    };
+    const s = byStreamer[gk];
+    s.total += r.rmb;
+    s.count += 1;
+    s.max = Math.max(s.max, r.rmb);
+    s.months.add(r.month);
+    s.times.push(r.time);
+    s.byMonth[r.month] = (s.byMonth[r.month] || 0) + r.rmb;
+    s.members.add(r.streamer);
+  }
+  for (const s of Object.values(byStreamer)) {
+    s.times.sort();
+    s.first = s.times[0];
+    s.last = s.times[s.times.length - 1];
+    s.avg = s.total / s.count;
+    s.monthCount = s.months.size;
+    s.memberCount = s.members.size;
+  }
+
+  // By gift
+  const byGift = {};
+  for (const r of spend) {
+    if (!byGift[r.gift]) byGift[r.gift] = { name: r.gift, total: 0, count: 0 };
+    byGift[r.gift].total += r.rmb;
+    byGift[r.gift].count += 1;
+  }
+  for (const g of Object.values(byGift)) g.avg = g.total / g.count;
+
+  return {
+    totalSpend, totalRecharge,
+    streamerCount: streamerSet.size,
+    txCount: spend.length,
+    rechargeCount: recharge.length,
+    months,
+    avgMonthly, maxTx,
+    byMonth, byStreamer, byGift,
+    spend, recharge,
+    firstDate: spend.length ? spend[0].time : '',
+    lastDate: spend.length ? spend[spend.length - 1].time : '',
+  };
+}
+
+// ============ Render ============
+function render() {
+  const agg = aggregate(state.filtered);
+  renderSummary(agg);
+  renderOverviewCharts(agg);
+  renderMonthly(agg);
+  renderStreamers(agg);
+  renderGifts(agg);
+  renderNicknames();
+  renderTx();
+}
+
+function renderSummary(agg) {
+  const grid = document.getElementById('summaryGrid');
+  const cards = [
+    { label: '总消费', value: fmtRMB(agg.totalSpend), color: 'pink', sub: `${fmtNum(agg.txCount)} 笔交易` },
+    { label: '总充值', value: fmtRMB(agg.totalRecharge), color: 'purple', sub: `${fmtNum(agg.rechargeCount)} 次充值` },
+    { label: '主播数量', value: fmtNum(agg.streamerCount), color: 'pink', sub: '按合并昵称统计' },
+    { label: '月均消费', value: fmtRMB(agg.avgMonthly), color: 'purple', sub: `${agg.months.length} 个月` },
+  ];
+  grid.innerHTML = cards.map(c => `
+    <div class="card">
+      <div class="stat-label">${c.label}</div>
+      <div class="stat-value ${c.color}">${c.value}</div>
+      <div class="stat-sub">${c.sub}</div>
+    </div>
+  `).join('');
+}
+
+function destroyChart(key) {
+  if (state.charts[key]) { state.charts[key].destroy(); delete state.charts[key]; }
+}
+
+function renderOverviewCharts(agg) {
+  const topN = state.filters.topN;
+
+  // Monthly trend
+  destroyChart('monthly');
+  const monthLabels = agg.months;
+  const monthData = monthLabels.map(m => agg.byMonth[m]?.spend || 0);
+  state.charts.monthly = new Chart(document.getElementById('chartMonthly'), {
+    type: 'bar',
+    data: {
+      labels: monthLabels,
+      datasets: [{
+        label: '月度消费',
+        data: monthData,
+        backgroundColor: 'rgba(236, 72, 153, 0.7)',
+        borderColor: '#ec4899',
+        borderWidth: 1,
+        borderRadius: 6,
+      }]
+    },
+    options: chartOpts({ yIsRMB: true })
+  });
+
+  // Top streamers (horizontal bar)
+  destroyChart('top');
+  const topStreamers = Object.values(agg.byStreamer).sort((a,b) => b.total - a.total).slice(0, topN);
+  state.charts.top = new Chart(document.getElementById('chartTopStreamers'), {
+    type: 'bar',
+    data: {
+      labels: topStreamers.map(s => nickOf(s.id)),
+      datasets: [{
+        label: '总消费',
+        data: topStreamers.map(s => s.total),
+        backgroundColor: topStreamers.map((_, i) => PALETTE[i % PALETTE.length] + 'b3'),
+        borderColor: topStreamers.map((_, i) => PALETTE[i % PALETTE.length]),
+        borderWidth: 1,
+        borderRadius: 6,
+      }]
+    },
+    options: { ...chartOpts({ yIsRMB: true, indexAxis: 'y' }), indexAxis: 'y' }
+  });
+
+  // Stacked monthly by top streamers
+  destroyChart('stacked');
+  const stackLabels = monthLabels;
+  const datasets = topStreamers.map((s, i) => ({
+    label: nickOf(s.id),
+    data: stackLabels.map(m => s.byMonth[m] || 0),
+    backgroundColor: PALETTE[i % PALETTE.length],
+    borderWidth: 0,
+  }));
+  // Add "其他" if there are more streamers
+  const otherStreamers = Object.values(agg.byStreamer).sort((a,b) => b.total - a.total).slice(topN);
+  if (otherStreamers.length) {
+    datasets.push({
+      label: '其他',
+      data: stackLabels.map(m => otherStreamers.reduce((s, st) => s + (st.byMonth[m] || 0), 0)),
+      backgroundColor: '#d1d5db',
+      borderWidth: 0,
+    });
+  }
+  state.charts.stacked = new Chart(document.getElementById('chartStacked'), {
+    type: 'bar',
+    data: { labels: stackLabels, datasets },
+    options: { ...chartOpts({ yIsRMB: true, stacked: true }), scales: {
+      x: { stacked: true, ticks: { color: '#6b7280' }, grid: { display: false } },
+      y: { stacked: true, ticks: { color: '#6b7280', callback: (v) => '¥' + v.toLocaleString() }, grid: { color: '#f3f4f6' } }
+    }}
+  });
+}
+
+function renderMonthly(agg) {
+  // Detailed chart (bar + cumulative line)
+  destroyChart('monthlyDetail');
+  const labels = agg.months;
+  const spendData = labels.map(m => agg.byMonth[m]?.spend || 0);
+  const rechargeData = labels.map(m => agg.byMonth[m]?.recharge || 0);
+  let cum = 0;
+  const cumData = spendData.map(v => (cum += v));
+  state.charts.monthlyDetail = new Chart(document.getElementById('chartMonthlyDetail'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: '消费', data: spendData, backgroundColor: 'rgba(236,72,153,0.7)', borderColor: '#ec4899', borderWidth: 1, borderRadius: 6, order: 2, yAxisID: 'y' },
+        { label: '充值', data: rechargeData, backgroundColor: 'rgba(168,85,247,0.6)', borderColor: '#a855f7', borderWidth: 1, borderRadius: 6, order: 2, yAxisID: 'y' },
+        { type: 'line', label: '累计消费', data: cumData, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', fill: false, tension: 0.3, borderWidth: 2, pointRadius: 4, order: 1, yAxisID: 'y1' },
+      ]
+    },
+    options: {
+      ...chartOpts({}),
+      scales: {
+        x: { ticks: { color: '#6b7280' }, grid: { display: false } },
+        y: { position: 'left', title: { display: true, text: '月度 (¥)', color: '#6b7280' }, ticks: { color: '#6b7280', callback: (v) => '¥' + v.toLocaleString() }, grid: { color: '#f3f4f6' } },
+        y1: { position: 'right', title: { display: true, text: '累计 (¥)', color: '#f59e0b' }, ticks: { color: '#f59e0b', callback: (v) => '¥' + v.toLocaleString() }, grid: { drawOnChartArea: false } },
+      }
+    }
+  });
+
+  // Populate the pie month picker (keep current selection if still valid; else default to most recent)
+  const pieSel = document.getElementById('pieMonth');
+  const prevPieMonth = pieSel.value;
+  pieSel.innerHTML = agg.months.map(m => `<option value="${m}">${m}</option>`).join('');
+  if (agg.months.includes(prevPieMonth)) pieSel.value = prevPieMonth;
+  else if (agg.months.length) pieSel.value = agg.months[agg.months.length - 1];
+  renderMonthPie(agg, pieSel.value);
+
+  // Monthly table
+  const tbody = document.querySelector('#monthlyTable tbody');
+  tbody.innerHTML = agg.months.map(m => {
+    const d = agg.byMonth[m];
+    // Top streamer this month
+    const topThis = Object.entries(d.byStreamer || {}).sort((a,b) => b[1]-a[1])[0];
+    const topLabel = topThis ? `${nickOf(topThis[0])} (${fmtRMB(topThis[1])})` : '—';
+    return `<tr>
+      <td><b>${m}</b></td>
+      <td class="num">${fmtRMB(d.spend)}</td>
+      <td class="num">${fmtRMB(d.recharge || 0)}</td>
+      <td class="num">${fmtNum(d.count)}</td>
+      <td class="num">${d.streamers.size}</td>
+      <td class="num">${fmtRMB(d.max)}</td>
+      <td>${topLabel}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="7" style="text-align:center;color:#9ca3af;">无数据</td></tr>';
+}
+
+function renderMonthPie(agg, month) {
+  destroyChart('monthPie');
+  if (!month || !agg.byMonth[month]) return;
+  const n = state.filters.topN; // honour the shared top-N filter
+  const byStreamer = agg.byMonth[month].byStreamer || {};
+  const entries = Object.entries(byStreamer).sort((a,b) => b[1] - a[1]);
+  const topN = entries.slice(0, n);
+  const rest = entries.slice(n);
+  const labels = topN.map(([k]) => k);
+  const data = topN.map(([, v]) => v);
+  const restTotal = rest.reduce((s, [, v]) => s + v, 0);
+  if (restTotal > 0) {
+    labels.push(`其他 (${rest.length} 主播)`);
+    data.push(restTotal);
+  }
+  const monthTotal = data.reduce((s, v) => s + v, 0);
+  const colors = labels.map((_, i) => (i === labels.length - 1 && restTotal > 0) ? '#d1d5db' : PALETTE[i % PALETTE.length]);
+  state.charts.monthPie = new Chart(document.getElementById('chartMonthPie'), {
+    type: 'pie',
+    data: {
+      labels,
+      datasets: [{ data, backgroundColor: colors, borderColor: '#fff', borderWidth: 2 }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'right', labels: { font: { size: 12 }, padding: 10, boxWidth: 14 } },
+        tooltip: {
+          backgroundColor: 'rgba(31,41,55,0.95)', titleColor: '#fff', bodyColor: '#fff', padding: 10,
+          callbacks: {
+            label: (ctx) => {
+              const pct = monthTotal > 0 ? (ctx.parsed / monthTotal * 100).toFixed(1) : '0';
+              return ` ${ctx.label}: ${fmtRMB(ctx.parsed)} (${pct}%)`;
+            }
+          }
+        },
+        title: {
+          display: true,
+          text: `${month} 总消费 ${fmtRMB(monthTotal)}`,
+          color: '#374151',
+          font: { size: 14, weight: '600' },
+          padding: { bottom: 10 },
+        },
+      },
+    },
+  });
+}
+
+function renderStreamers(agg) {
+  const rows = Object.values(agg.byStreamer);
+  const { col, dir } = state.sort;
+  const cmp = (a, b) => {
+    let av, bv;
+    switch (col) {
+      case 'name': av = a.id; bv = b.id; break;
+      case 'id': av = [...a.members].join(','); bv = [...b.members].join(','); break;
+      case 'memberCount': av = a.memberCount; bv = b.memberCount; break;
+      case 'total': av = a.total; bv = b.total; break;
+      case 'count': av = a.count; bv = b.count; break;
+      case 'avg': av = a.avg; bv = b.avg; break;
+      case 'max': av = a.max; bv = b.max; break;
+      case 'months': av = a.monthCount; bv = b.monthCount; break;
+      case 'first': av = a.first; bv = b.first; break;
+      case 'last': av = a.last; bv = b.last; break;
+      default: av = a.total; bv = b.total;
+    }
+    if (typeof av === 'string') return dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    return dir === 'asc' ? av - bv : bv - av;
+  };
+  rows.sort(cmp);
+
+  const tbody = document.querySelector('#streamerTable tbody');
+  tbody.innerHTML = rows.map(s => {
+    const members = [...s.members];
+    // If any member has a custom nickname for this group key, mark name as nicknamed
+    const hasNick = members.some(m => state.nicknames[m]);
+    const memberBadge = s.memberCount > 1
+      ? `<span style="background:#fce7f3;color:#ec4899;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:600;">${s.memberCount}</span>`
+      : `<span style="color:#9ca3af;">1</span>`;
+    return `<tr>
+      <td class="${hasNick ? 'has-nickname' : ''}">${s.id}</td>
+      <td class="num">${memberBadge}</td>
+      <td style="color:#9ca3af;font-size:12px;font-family:monospace;">${members.join(', ')}</td>
+      <td class="num"><b>${fmtRMB(s.total)}</b></td>
+      <td class="num">${fmtNum(s.count)}</td>
+      <td class="num">${fmtRMB(s.avg)}</td>
+      <td class="num">${fmtRMB(s.max)}</td>
+      <td class="num">${s.monthCount}</td>
+      <td style="color:#6b7280;font-size:12px;">${(s.first || '').substring(0,10)}</td>
+      <td style="color:#6b7280;font-size:12px;">${(s.last || '').substring(0,10)}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="10" style="text-align:center;color:#9ca3af;">无数据</td></tr>';
+
+  // Update header sort indicators
+  document.querySelectorAll('#streamerTable th').forEach(th => {
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (th.dataset.sort === col) th.classList.add(dir === 'asc' ? 'sort-asc' : 'sort-desc');
+  });
+}
+
+function renderGifts(agg) {
+  const giftsByValue = Object.values(agg.byGift).sort((a,b) => b.total - a.total).slice(0, 20);
+  const giftsByCount = Object.values(agg.byGift).sort((a,b) => b.count - a.count).slice(0, 20);
+  const totalSpend = agg.totalSpend || 1;
+
+  destroyChart('giftsValue');
+  state.charts.giftsValue = new Chart(document.getElementById('chartGiftsValue'), {
+    type: 'bar',
+    data: {
+      labels: giftsByValue.map(g => g.name),
+      datasets: [{
+        label: '消费',
+        data: giftsByValue.map(g => g.total),
+        backgroundColor: giftsByValue.map((_, i) => PALETTE[i % PALETTE.length] + 'b3'),
+        borderRadius: 4,
+      }]
+    },
+    options: { ...chartOpts({ yIsRMB: true, indexAxis: 'y' }), indexAxis: 'y' }
+  });
+
+  destroyChart('giftsCount');
+  state.charts.giftsCount = new Chart(document.getElementById('chartGiftsCount'), {
+    type: 'bar',
+    data: {
+      labels: giftsByCount.map(g => g.name),
+      datasets: [{
+        label: '次数',
+        data: giftsByCount.map(g => g.count),
+        backgroundColor: giftsByCount.map((_, i) => PALETTE[(i+5) % PALETTE.length] + 'b3'),
+        borderRadius: 4,
+      }]
+    },
+    options: { ...chartOpts({ indexAxis: 'y' }), indexAxis: 'y' }
+  });
+
+  const tbody = document.querySelector('#giftsTable tbody');
+  const allGifts = Object.values(agg.byGift).sort((a,b) => b.total - a.total);
+  tbody.innerHTML = allGifts.map(g => `<tr>
+    <td>${g.name}</td>
+    <td class="num"><b>${fmtRMB(g.total)}</b></td>
+    <td class="num">${fmtNum(g.count)}</td>
+    <td class="num">${fmtRMB(g.avg)}</td>
+    <td class="num">${(g.total / totalSpend * 100).toFixed(1)}%</td>
+  </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:#9ca3af;">无数据</td></tr>';
+}
+
+function renderNicknames() {
+  // Use ALL streamer stats (not filtered) for nickname management
+  // Build group info: total per group, # of accounts in group
+  const rows = Object.entries(state.streamerStats).map(([id, s]) => ({
+    id, total: s.total, count: s.count,
+    nickname: state.nicknames[id] || '',
+    group: nickOf(id),
+  }));
+  const groupTotals = {};
+  const groupSizes = {};
+  for (const r of rows) {
+    groupTotals[r.group] = (groupTotals[r.group] || 0) + r.total;
+    groupSizes[r.group] = (groupSizes[r.group] || 0) + 1;
+  }
+  rows.forEach(r => { r.groupTotal = groupTotals[r.group]; r.groupSize = groupSizes[r.group]; });
+  // Sort: by group total desc → group key (to keep group members adjacent) → individual total desc
+  rows.sort((a, b) => {
+    if (b.groupTotal !== a.groupTotal) return b.groupTotal - a.groupTotal;
+    if (a.group !== b.group) return a.group.localeCompare(b.group);
+    return b.total - a.total;
+  });
+
+  const tbody = document.querySelector('#nicknamesTable tbody');
+  tbody.innerHTML = rows.map((r, idx) => {
+    const isMerged = r.groupSize > 1;
+    const isGroupHead = idx === 0 || rows[idx-1].group !== r.group;
+    const bgStyle = isMerged ? 'background:rgba(252, 232, 243, 0.45);' : '';
+    const borderStyle = isMerged ? `border-left:3px solid #ec4899;` : '';
+    const groupBadge = (isMerged && isGroupHead)
+      ? ` <span style="background:#ec4899;color:white;padding:1px 6px;border-radius:4px;font-size:11px;margin-left:6px;">合并 ${r.groupSize} 账号</span>`
+      : '';
+    // Only show group total on the first row of each group, to avoid visual clutter
+    const groupTotalCell = isMerged
+      ? `<td class="num">${isGroupHead ? `<b style="color:#ec4899;">${fmtRMB(r.groupTotal)}</b>` : '<span style="color:#d1d5db;">↑</span>'}</td>`
+      : `<td class="num"><span style="color:#d1d5db;">—</span></td>`;
+    return `<tr style="${bgStyle}${borderStyle}">
+      <td style="font-family:monospace;font-size:12px;color:#6b7280;">${r.id}</td>
+      <td>
+        <input type="text" class="nickname-input" data-id="${r.id}" value="${r.nickname}" placeholder="输入昵称...">${groupBadge}
+      </td>
+      <td class="num">${fmtRMB(r.total)}</td>
+      <td class="num">${fmtNum(r.count)}</td>
+      ${groupTotalCell}
+    </tr>`;
+  }).join('');
+
+  // Bind input events
+  tbody.querySelectorAll('.nickname-input').forEach(inp => {
+    inp.addEventListener('change', (e) => {
+      const id = e.target.dataset.id;
+      const val = e.target.value.trim();
+      if (val) state.nicknames[id] = val;
+      else delete state.nicknames[id];
+      saveNicknames();
+      // Re-render everything that uses nicknames
+      render();
+      // Re-populate streamer filter dropdown with the new groups
+      populateStreamerFilter();
+      updateNickStatus();
+    });
+  });
+}
+
+function renderTx() {
+  const search = document.getElementById('txSearch').value.trim().toLowerCase();
+  const typeFilter = document.getElementById('txType').value;
+  let rows = [...state.filtered];
+  if (typeFilter !== 'all') rows = rows.filter(r => r.type === typeFilter);
+  if (search) {
+    rows = rows.filter(r =>
+      r.gift.toLowerCase().includes(search) ||
+      r.streamer.toLowerCase().includes(search) ||
+      nickOf(r.streamer).toLowerCase().includes(search)
+    );
+  }
+  // Most recent first
+  rows.sort((a,b) => b.time.localeCompare(a.time));
+
+  const LIMIT = 500;
+  const display = rows.slice(0, LIMIT);
+
+  const tbody = document.querySelector('#txTable tbody');
+  tbody.innerHTML = display.map(r => {
+    const isPlaceholder = r.streamer === '-';
+    const hasNick = !isPlaceholder && state.nicknames[r.streamer];
+    const accountCell = isPlaceholder
+      ? '<span style="color:#9ca3af;">—</span>'
+      : `<span style="font-family:monospace;font-size:12px;color:#6b7280;">${r.streamer}</span>`;
+    const nickCell = isPlaceholder
+      ? '<span style="color:#9ca3af;">—</span>'
+      : (hasNick
+          ? `<span class="has-nickname">${nickOf(r.streamer)}</span>`
+          : '<span style="color:#d1d5db;">（未设置）</span>');
+    return `<tr>
+      <td style="font-family:monospace;font-size:12px;">${r.time}</td>
+      <td style="color:${r.type === '出账' ? '#ec4899' : '#10b981'};font-weight:500;">${r.type}</td>
+      <td>${r.gift}</td>
+      <td>${accountCell}</td>
+      <td>${nickCell}</td>
+      <td class="num"><b>${fmtRMB(r.rmb)}</b></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" style="text-align:center;color:#9ca3af;">无匹配记录</td></tr>';
+
+  document.getElementById('txMore').textContent =
+    rows.length > LIMIT ? `仅显示最新 ${LIMIT} 条 / 共 ${rows.length} 条匹配记录` : `共 ${rows.length} 条记录`;
+}
+
+// ============ Chart helpers ============
+function chartOpts({ yIsRMB = false, indexAxis = 'x', stacked = false } = {}) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: indexAxis === 'x' && !stacked ? false : true, position: 'bottom', labels: { font: { size: 11 }, padding: 8, boxWidth: 12 } },
+      tooltip: {
+        backgroundColor: 'rgba(31,41,55,0.95)',
+        titleColor: '#fff',
+        bodyColor: '#fff',
+        padding: 10,
+        callbacks: {
+          label: (ctx) => {
+            const v = ctx.parsed[indexAxis === 'y' ? 'x' : 'y'];
+            return ` ${ctx.dataset.label}: ${yIsRMB ? fmtRMB(v) : fmtNum(v)}`;
+          }
+        }
+      }
+    },
+    scales: indexAxis === 'y' ? {
+      x: { ticks: { color: '#6b7280', callback: (v) => yIsRMB ? '¥' + v.toLocaleString() : v.toLocaleString() }, grid: { color: '#f3f4f6' } },
+      y: { ticks: { color: '#6b7280', font: { size: 11 } }, grid: { display: false } }
+    } : {
+      x: { ticks: { color: '#6b7280' }, grid: { display: false } },
+      y: { ticks: { color: '#6b7280', callback: (v) => yIsRMB ? '¥' + v.toLocaleString() : v.toLocaleString() }, grid: { color: '#f3f4f6' } }
+    }
+  };
+}
+
+// ============ Event handlers ============
+document.getElementById('startMonth').addEventListener('change', (e) => { state.filters.startMonth = e.target.value; applyFilters(); });
+document.getElementById('endMonth').addEventListener('change', (e) => { state.filters.endMonth = e.target.value; applyFilters(); });
+document.getElementById('streamerFilter').addEventListener('change', (e) => { state.filters.streamer = e.target.value; applyFilters(); });
+document.getElementById('topN').addEventListener('change', (e) => {
+  const v = e.target.value;
+  const customInput = document.getElementById('topNCustom');
+  if (v === 'custom') {
+    customInput.style.display = '';
+    state.filters.topN = parseInt(customInput.value) || 10;
+  } else {
+    customInput.style.display = 'none';
+    state.filters.topN = parseInt(v);
+  }
+  render();
+});
+document.getElementById('topNCustom').addEventListener('change', (e) => {
+  const n = parseInt(e.target.value);
+  if (n > 0) { state.filters.topN = n; render(); }
+});
+document.getElementById('resetFilters').addEventListener('click', () => {
+  const months = [...new Set(state.raw.map(r => r.month))].sort();
+  state.filters.startMonth = months[0];
+  state.filters.endMonth = months[months.length - 1];
+  state.filters.streamer = '';
+  state.filters.topN = 10;
+  document.getElementById('startMonth').value = state.filters.startMonth;
+  document.getElementById('endMonth').value = state.filters.endMonth;
+  document.getElementById('streamerFilter').value = '';
+  document.getElementById('topN').value = '10';
+  document.getElementById('topNCustom').style.display = 'none';
+  applyFilters();
+});
+
+document.getElementById('txSearch').addEventListener('input', renderTx);
+document.getElementById('txType').addEventListener('change', renderTx);
+
+document.getElementById('pieMonth').addEventListener('change', (e) => {
+  const agg = aggregate(state.filtered);
+  renderMonthPie(agg, e.target.value);
+});
+
+// Nickname export — downloads a JSON backup
+document.getElementById('exportNicks').addEventListener('click', () => {
+  const count = Object.keys(state.nicknames).length;
+  if (count === 0) { alert('当前没有昵称可导出'); return; }
+  const payload = {
+    _meta: {
+      exportedAt: new Date().toISOString(),
+      count,
+      note: '抖音消费看板 - 主播昵称备份。导入此文件即可恢复。',
+    },
+    nicknames: state.nicknames,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const datestr = new Date().toISOString().substring(0, 10);
+  a.href = url;
+  a.download = `主播昵称备份_${datestr}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+
+// Nickname import — restores from JSON (merges with current; imported values win conflicts)
+document.getElementById('importNicksBtn').addEventListener('click', () => {
+  document.getElementById('importNicksFile').click();
+});
+document.getElementById('importNicksFile').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      const incoming = data.nicknames || data; // accept either { nicknames: {...} } or plain {...}
+      if (typeof incoming !== 'object' || Array.isArray(incoming)) throw new Error('格式不正确');
+      const before = Object.keys(state.nicknames).length;
+      Object.assign(state.nicknames, incoming);
+      const after = Object.keys(state.nicknames).length;
+      saveNicknames();
+      // Re-render if data is loaded
+      if (state.raw.length > 0) {
+        render();
+        populateStreamerFilter();
+      }
+      updateNickStatus();
+      alert(`✓ 导入成功！\n之前 ${before} 个 → 现在 ${after} 个昵称`);
+    } catch (err) {
+      alert('导入失败：' + err.message);
+    }
+    e.target.value = ''; // reset so re-importing same file triggers change again
+  };
+  reader.readAsText(file, 'UTF-8');
+});
+
+function updateNickStatus() {
+  const el = document.getElementById('nickStatus');
+  if (!el) return;
+  const total = Object.keys(state.nicknames).length;
+  // Count how many distinct groups (unique nickname values)
+  const groups = new Set(Object.values(state.nicknames));
+  el.textContent = total === 0
+    ? '当前还未设置任何昵称'
+    : `当前已保存 ${total} 个昵称（合并为 ${groups.size} 组主播）`;
+}
+// Initial status
+updateNickStatus();
+
+// Tab switching
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('tab-' + t.dataset.tab).classList.add('active');
+    // Resize charts after tab becomes visible
+    Object.values(state.charts).forEach(c => c?.resize?.());
+  });
+});
+
+// Streamer table sorting
+document.querySelectorAll('#streamerTable th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const col = th.dataset.sort;
+    if (state.sort.col === col) state.sort.dir = state.sort.dir === 'asc' ? 'desc' : 'asc';
+    else { state.sort.col = col; state.sort.dir = ['name','id','first','last'].includes(col) ? 'asc' : 'desc'; }
+    // Need fresh aggregate — easier to just re-render full
+    render();
+  });
+});
+</script>
+</body>
+</html>

@@ -16,4 +16,4 @@ I watch livestreams on Douyin and tip streamers. I wonder who I tipped the most 
 
 ---
 
-*made by [@player99labs](.)*
+*made by [@player99labs](https://github.com/player99labs)*

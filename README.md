@@ -2,7 +2,7 @@
 
 A drag-and-drop dashboard to see where your Douyin 💎 actually goes.
 
-I watch livestreams on Douyin and tip streamers. I wonder who I tipped the most so I built one.
+I watch livestreams on Douyin and tip streamers. I wonder who I tipped the most so I built this.
 
 **Live:** https://player99labs.github.io/douyin-spending-dashboard/
 
